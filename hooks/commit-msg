@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Cross-platform commit message validation hook
+# Ensures commit messages include a JIRA tag (e.g., HIF-1234)
+# Skips check on 'main' branch
+
+set -e
+
+BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD)
+COMMIT_MSG_FILE=$1
+COMMIT_MSG=$(head -n1 "$COMMIT_MSG_FILE")
+
+# Skip enforcement on main branch
+if [ "$BRANCH_NAME" = "main" ]; then
+  exit 0
+fi
+
+# Regex: Must match HIF-<digits> followed by space or colon
+if ! echo "$COMMIT_MSG" | grep -Eq "^HIF-[0-9]+[ :].+"; then
+  echo "❌ Commit message must start with a valid JIRA tag."
+  echo "✅ Example: HIF-1234: your message"
+  echo "✅ Example: HIF-1234 your message"
+  echo "❌ Invalid examples: HIF1234, HIF_1234, no tag"
+  exit 1
+fi
+
+exit 0
