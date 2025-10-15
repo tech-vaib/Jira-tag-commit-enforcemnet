@@ -1,0 +1,38 @@
+name: Validate Commit Messages
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  validate-commits:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required to access all commits in PR
+
+      - name: Validate commit messages
+        run: |
+          BASE_BRANCH=${{ github.event.pull_request.base.ref }}
+          if [ "$BASE_BRANCH" = "main" ]; then
+            echo "✅ Skipping validation on main branch"
+            exit 0
+          fi
+
+          echo "🔍 Validating commit messages..."
+          INVALID_COMMITS=0
+          while IFS= read -r COMMIT_MSG; do
+            if ! echo "$COMMIT_MSG" | grep -Eq "^HIF-[0-9]+[ :].+"; then
+              echo "❌ Invalid commit message: $COMMIT_MSG"
+              INVALID_COMMITS=1
+            fi
+          done < <(git log origin/${{ github.event.pull_request.base.ref }}..HEAD --pretty=format:"%s")
+
+          if [ "$INVALID_COMMITS" -ne 0 ]; then
+            echo "🚫 Some commit messages do not follow the required JIRA format (HIF-1234: message)"
+            exit 1
+          fi
+
+          echo "✅ All commit messages are valid."
