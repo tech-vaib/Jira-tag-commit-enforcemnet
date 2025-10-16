@@ -1,0 +1,37 @@
+name: Publish Release Notes to Confluence
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish-release-notes:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Publish release notes to Confluence
+        env:
+          CONFLUENCE_BASE_URL: ${{ secrets.CONFLUENCE_BASE_URL }}
+          CONFLUENCE_SPACE_KEY: ${{ secrets.CONFLUENCE_SPACE_KEY }}
+          CONFLUENCE_PARENT_PAGE_ID: ${{ secrets.CONFLUENCE_PARENT_PAGE_ID }}
+          CONFLUENCE_USER_EMAIL: ${{ secrets.CONFLUENCE_USER_EMAIL }}
+          CONFLUENCE_API_TOKEN: ${{ secrets.CONFLUENCE_API_TOKEN }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          CONFLUENCE_PAGE_LABEL: ${{ secrets.CONFLUENCE_PAGE_LABEL }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: python scripts/publish_to_confluence.py
