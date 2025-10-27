@@ -1,0 +1,69 @@
+name: Check Commit Message Format
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  check-commit-messages:
+    name: Validate commit messages
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR commits
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate commit messages
+        run: |
+          echo "🔍 Checking commit messages in PR #${{ github.event.pull_request.number }}"
+
+          # Fetch all commits between the base and head of the PR
+          commits=$(git log origin/${{ github.base_ref }}..HEAD --pretty=format:"%s")
+          commit_count=$(echo "$commits" | wc -l | tr -d ' ')
+          
+          echo "🧾 Found $commit_count commits in this PR."
+
+          # If no commits, skip validation (e.g., only tag or merge update)
+          if [[ $commit_count -eq 0 ]]; then
+            echo "ℹ️ No new commits found, skipping validation."
+            exit 0
+          fi
+
+          # Define allowed regex patterns
+          regex1='^\[HIF-[0-9]+\] .+'
+          regex2='^\[PLM-P[0-9]+-[0-9]+\] .+'
+          regex3='^Coding style for "\[HIF-[0-9]+\] .+"$'
+          regex4='^Coding style for "\[PLM-P[0-9]+-[0-9]+\] .+"$'
+
+          invalid=0
+
+          while IFS= read -r msg; do
+            # Skip merge commits or tag merges
+            if [[ $msg =~ ^Merge ]] || [[ $msg =~ ^Tag ]]; then
+              echo "🔁 Skipping merge/tag commit: '$msg'"
+              continue
+            fi
+
+            # Check against allowed formats
+            if [[ ! $msg =~ $regex1 && ! $msg =~ $regex2 && ! $msg =~ $regex3 && ! $msg =~ $regex4 ]]; then
+              echo "❌ Invalid commit message: '$msg'"
+              invalid=1
+            else
+              echo "✅ Valid commit message: '$msg'"
+            fi
+          done <<< "$commits"
+
+          if [[ $invalid -ne 0 ]]; then
+            echo ""
+            echo "🚫 Commit message format check failed!"
+            echo "Please follow one of the allowed formats:"
+            echo "  1. [HIF-1234] your message"
+            echo "  2. [PLM-P334344-44545] your message"
+            echo "  3. Coding style for \"[HIF-1234] your message\""
+            echo "  4. Coding style for \"[PLM-P334344-44545] your message\""
+            exit 1
+          else
+            echo "🎉 All commit messages are valid!"
+          fi
