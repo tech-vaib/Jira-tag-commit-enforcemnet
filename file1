@@ -19,15 +19,15 @@ jobs:
         run: |
           echo "🔍 Checking commit messages in PR #${{ github.event.pull_request.number }}"
 
-          # Fetch all commits between the base and head of the PR
-          commits=$(git log origin/${{ github.base_ref }}..HEAD --pretty=format:"%s")
+          # Fetch only non-merge commits between base and head
+          commits=$(git log origin/${{ github.base_ref }}..HEAD --no-merges --pretty=format:"%s")
           commit_count=$(echo "$commits" | wc -l | tr -d ' ')
           
-          echo "🧾 Found $commit_count commits in this PR."
+          echo "🧾 Found $commit_count non-merge commits in this PR."
 
-          # If no commits, skip validation (e.g., only tag or merge update)
+          # If no commits, skip validation
           if [[ $commit_count -eq 0 ]]; then
-            echo "ℹ️ No new commits found, skipping validation."
+            echo "ℹ️ No new commits found (likely only merges or tags). Skipping validation."
             exit 0
           fi
 
@@ -40,13 +40,6 @@ jobs:
           invalid=0
 
           while IFS= read -r msg; do
-            # Skip merge commits or tag merges
-            if [[ $msg =~ ^Merge ]] || [[ $msg =~ ^Tag ]]; then
-              echo "🔁 Skipping merge/tag commit: '$msg'"
-              continue
-            fi
-
-            # Check against allowed formats
             if [[ ! $msg =~ $regex1 && ! $msg =~ $regex2 && ! $msg =~ $regex3 && ! $msg =~ $regex4 ]]; then
               echo "❌ Invalid commit message: '$msg'"
               invalid=1
