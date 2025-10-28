@@ -1,0 +1,32 @@
+#!/bin/bash
+#
+# Git commit-msg hook to enforce commit message format
+# Allowed formats:
+#   [HIF-1234] your message
+#   [PLM-P1224-5678] your message
+
+commit_msg_file="$1"
+commit_msg=$(head -n1 "$commit_msg_file")
+
+# Allowed regex patterns
+regex1='^\[HIF-[0-9]+\] .+'
+regex2='^\[PLM-P[0-9]+-[0-9]+\] .+'
+
+# Skip merge commits automatically (merge messages are auto-generated)
+if grep -q "^Merge" "$commit_msg_file"; then
+  exit 0
+fi
+
+if [[ $commit_msg =~ $regex1 || $commit_msg =~ $regex2 ]]; then
+  echo "✅ Commit message format valid."
+  exit 0
+else
+  echo "❌ Invalid commit message format!"
+  echo "Your commit message was:"
+  echo "    $commit_msg"
+  echo ""
+  echo "Please follow one of the allowed formats:"
+  echo "  [HIF-1234] your message"
+  echo "  [PLM-P1224-5678] your message"
+  exit 1
+fi
