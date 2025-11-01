@@ -1,0 +1,109 @@
+name: "Publish Release Notes to Confluence"
+
+on:
+  push:
+    tags:
+      - '*'  # Trigger on any tag push
+
+jobs:
+  publish-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed to get all tags and commits
+
+      - name: Set up environment variables
+        id: vars
+        run: |
+          echo "REPO_NAME=${GITHUB_REPOSITORY##*/}" >> $GITHUB_ENV
+          echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          echo "DATE_TIME=$(date '+%m-%d-%Y %H:%M')" >> $GITHUB_ENV
+
+      - name: Get commits since last tag
+        id: commits
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 "${TAG_NAME}^" 2>/dev/null || echo "")
+          echo "Previous tag: $PREV_TAG"
+          if [ -z "$PREV_TAG" ]; then
+            git log --pretty=format:'%s' > commits.txt
+          else
+            git log "$PREV_TAG..${TAG_NAME}" --pretty=format:'%s' > commits.txt
+          fi
+          echo "Commits collected:"
+          cat commits.txt
+
+      - name: Get PR titles for commits
+        id: pr_titles
+        run: |
+          echo "Fetching PR titles..."
+          titles_file="titles.txt"
+          : > "$titles_file"
+
+          while read -r commit; do
+            # Search PRs that include this commit
+            prs=$(gh pr list --search "$commit" --state merged --json title --jq '.[].title' || true)
+            if [ -n "$prs" ]; then
+              echo "$prs" >> "$titles_file"
+            else
+              echo "$commit" >> "$titles_file"
+            fi
+          done < commits.txt
+
+          sort -u "$titles_file" > unique_titles.txt
+          echo "Collected unique PR titles:"
+          cat unique_titles.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Confluence payload
+        id: build
+        run: |
+          SECTION_TITLE="${REPO_NAME} - ${TAG_NAME} - ${DATE_TIME}"
+          CONTENT=$(awk '{print "* " $0}' unique_titles.txt | sed ':a;N;$!ba;s/\n/\\n/g')
+
+          echo "SECTION_TITLE=$SECTION_TITLE" >> $GITHUB_ENV
+          echo "CONTENT=$CONTENT" >> $GITHUB_ENV
+
+      - name: Update Confluence page
+        run: |
+          PAGE_ID=${{ secrets.CONFLUENCE_PAGE_ID }}
+          CONFLUENCE_BASE_URL=${{ secrets.CONFLUENCE_BASE_URL }}
+          CONFLUENCE_API_TOKEN=${{ secrets.CONFLUENCE_API_TOKEN }}
+          USER_EMAIL=${{ secrets.CONFLUENCE_USER_EMAIL }}
+
+          # Get current page version and content
+          RESPONSE=$(curl -s -u "$USER_EMAIL:$CONFLUENCE_API_TOKEN" \
+            "$CONFLUENCE_BASE_URL/wiki/rest/api/content/$PAGE_ID?expand=body.storage,version")
+
+          VERSION=$(echo "$RESPONSE" | jq '.version.number')
+          OLD_CONTENT=$(echo "$RESPONSE" | jq -r '.body.storage.value')
+
+          # New section (prepend at top)
+          NEW_SECTION="<h2>${SECTION_TITLE}</h2><p>${CONTENT}</p><hr/>"
+
+          # Print the new section to workflow logs
+          echo "📝 NEW_SECTION content:"
+          echo "$NEW_SECTION"
+
+          NEW_CONTENT="${NEW_SECTION}${OLD_CONTENT}"
+
+          NEW_VERSION=$((VERSION + 1))
+
+          # Update page
+          curl -s -u "$USER_EMAIL:$CONFLUENCE_API_TOKEN" \
+            -X PUT \
+            -H 'Content-Type: application/json' \
+            -d "{
+              \"id\": \"$PAGE_ID\",
+              \"type\": \"page\",
+              \"title\": \"$(echo "$RESPONSE" | jq -r '.title')\",
+              \"version\": {\"number\": $NEW_VERSION},
+              \"body\": {\"storage\": {\"value\": \"$NEW_CONTENT\", \"representation\": \"storage\"}}
+            }" \
+            "$CONFLUENCE_BASE_URL/wiki/rest/api/content/$PAGE_ID" \
+            > result.json
+
+          echo "✅ Confluence page updated successfully!"
