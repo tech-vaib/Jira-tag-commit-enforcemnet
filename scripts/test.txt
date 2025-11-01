@@ -1,0 +1,4 @@
+curl -s -u "john.doe@example.com:abcd1234efgh5678" \
+  -X GET \
+  "https://mycompany.atlassian.net/wiki/rest/api/content/123456?expand=body.storage,version" \
+  | jq
