@@ -1,0 +1,42 @@
+name: "Enforce JIRA Ticket in PR Title or Commit"
+
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+
+jobs:
+  enforce-jira:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check PR title and last commit for JIRA ticket
+        run: |
+          # Regex pattern for valid JIRA ticket (e.g. ABC-123)
+          JIRA_PATTERN='[A-Z]{2,}-[0-9]+'
+
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          echo "🔎 PR title: $PR_TITLE"
+
+          # Get latest commit message
+          LAST_COMMIT_MSG=$(git log -1 --pretty=%B)
+          echo "🔎 Latest commit message: $LAST_COMMIT_MSG"
+
+          # Check PR title first
+          if [[ "$PR_TITLE" =~ $JIRA_PATTERN ]]; then
+            echo "✅ JIRA ticket found in PR title."
+            exit 0
+          fi
+
+          # If PR title fails, check latest commit
+          if [[ "$LAST_COMMIT_MSG" =~ $JIRA_PATTERN ]]; then
+            echo "✅ JIRA ticket found in latest commit message."
+            exit 0
+          fi
+
+          # Fail if neither contains a JIRA key
+          echo "❌ No valid JIRA ticket found in PR title or latest commit message."
+          echo "Please include a ticket like ABC-123 in either the PR title or the commit message."
+          exit 1
